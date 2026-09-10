@@ -33,7 +33,10 @@ class App:
                 self.i2c_master.value = SUPPORTED_DONGLES_DICT[last_selected_device["make_and_model"]].cons(
                     last_selected_device["port"], self.i2c_logger
                 )
-            except Exception:
+                if self.i2c_master is None or self.i2c_master.value is None:
+                    raise Exception(f'Unable to open {last_selected_device["make_and_model"]} on port {last_selected_device["port"]}')
+            except Exception as e:
+                print(e)
                 self.i2c_master.value = mk_DummyI2CMaster("COM", None)
         else:
             self.i2c_master.value = mk_DummyI2CMaster("COM", None)
