@@ -3,16 +3,13 @@ from collections.abc import Callable
 from typing import Any, override
 
 from PySide6.QtCore import (
-    QAbstractTableModel,
     QModelIndex,
     QPersistentModelIndex,
     Qt,
 )
-from PySide6.QtGui import QKeyEvent, QMouseEvent
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QLabel,
-    QTableView,
     QTableWidget,
 )
 from pytide6 import Dialog, HBoxPanel, Label, PushButton, RichTextLabel, VBoxLayout, W
@@ -20,8 +17,13 @@ from pytide6.inputs import LineEdit
 from sprats.collections import Variable
 
 from i2cc.app import App
-from i2cc.gui_tools import Txt2HTMLDelegate
-from i2cc.project.project import PROJECT_VALID_CHAR_RE
+from i2cc.gui_tools import (
+    InTableSearchField,
+    ListTableView,
+    TableModelAllSelectableAndEnabled,
+    TableModelWithFilterAction,
+    TableModelWithOneColumn,
+)
 
 
 class ProjectDialog(Dialog):
@@ -33,42 +35,45 @@ class ProjectDialog(Dialog):
         self.projects = QTableWidget(self)
 
 
-class ProjectsModel(QAbstractTableModel):
-    def __init__(self, tv: QTableView, app: App):
+class ProjectsModel(
+    TableModelWithOneColumn,
+    TableModelAllSelectableAndEnabled,
+    TableModelWithFilterAction,
+):
+    def __init__(self, app: App):
         super().__init__()
         self.app = app
         self.project_names = app.projects.list_projects()
         self.project_names.sort()
         self.project_names_to_display = self.project_names.copy()
         self.project_names_raw = self.project_names_to_display.copy()
-        self.tv = tv
 
-    def apply_filter(self, char_filter: list[str]):
+    def apply_filter(self, filter_text: str, post_filter_action: Callable[[], Any]):
+        char_filter = list(filter_text)
         self.beginResetModel()
-        self.project_names_to_display.clear()
-        self.project_names_raw.clear()
-        if char_filter == []:
-            self.project_names_to_display = self.project_names.copy()
-            self.project_names_raw = self.project_names_to_display.copy()
+        try:
+            self.project_names_to_display.clear()
+            self.project_names_raw.clear()
+            if char_filter == []:
+                self.project_names_to_display = self.project_names.copy()
+                self.project_names_raw = self.project_names_to_display.copy()
+                return
+
+            for project_name in self.project_names:
+                j = 0
+                new_label = ""
+                for i in range(len(project_name)):
+                    if j < len(char_filter) and char_filter[j].lower() == project_name[i].lower():
+                        j += 1
+                        new_label += f'<span style="background-color: pink; color: #000000;">{project_name[i]}</span>'
+                    else:
+                        new_label += project_name[i]
+                if j == len(char_filter):
+                    self.project_names_to_display.append(new_label)
+                    self.project_names_raw.append(project_name)
+        finally:
             self.endResetModel()
-            self.tv.selectRow(0)
-            return
-
-        for project_name in self.project_names:
-            j = 0
-            new_label = ""
-            for i in range(len(project_name)):
-                if j < len(char_filter) and char_filter[j].lower() == project_name[i].lower():
-                    j += 1
-                    new_label += f'<span style="background-color: pink; color: #000000;">{project_name[i]}</span>'
-                else:
-                    new_label += project_name[i]
-            if j == len(char_filter):
-                self.project_names_to_display.append(new_label)
-                self.project_names_raw.append(project_name)
-
-        self.endResetModel()
-        self.tv.selectRow(0)
+            post_filter_action()
 
     def headerData(self, section, orientation, /, role=...) -> Any:
         return None
@@ -87,58 +92,6 @@ class ProjectsModel(QAbstractTableModel):
 
     def flags(self, index: QModelIndex | QPersistentModelIndex) -> Qt.ItemFlag:
         return Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
-
-
-class ProjectTableView(QTableView):
-    def __init__(
-        self,
-        app: App,
-        selection_filter_changed: Callable[[list[str]], None],
-        open_project: Callable[[], None],
-        close_dialog: Callable[[], Any],
-    ):
-        super().__init__(None)
-        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.horizontalHeader().setStretchLastSection(True)
-        self.horizontalHeader().hide()
-        self.select_chars = []
-        self.projects_model = ProjectsModel(self, app)
-        self.setModel(self.projects_model)
-        self.setItemDelegate(Txt2HTMLDelegate())
-        self.selection_filter_changed = selection_filter_changed
-        self.open_project = open_project
-        self.close_dialog = close_dialog
-        self.selectRow(0)
-
-    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
-        super().mouseDoubleClickEvent(event)
-        self.open_project()
-
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        event_key = event.key()
-        match event_key:
-            case Qt.Key.Key_Escape:
-                if self.select_chars == []:
-                    self.close_dialog()
-                else:
-                    self.select_chars.clear()
-                    self.projects_model.apply_filter(self.select_chars)
-                    self.selection_filter_changed(self.select_chars)
-            case Qt.Key.Key_Backspace:
-                self.select_chars = self.select_chars[:-1]
-                self.projects_model.apply_filter(self.select_chars)
-                self.selection_filter_changed(self.select_chars)
-            case Qt.Key.Key_Return:
-                self.open_project()
-            case _:
-                ch = event.text()
-                if PROJECT_VALID_CHAR_RE.match(ch):
-                    self.select_chars.append(ch)
-                    self.projects_model.apply_filter(self.select_chars)
-                    self.selection_filter_changed(self.select_chars)
-                else:
-                    super().keyPressEvent(event)
 
 
 class SimpleProjectDialogBase(Dialog):
@@ -194,19 +147,37 @@ class OpenProjectDialog(SimpleProjectDialogBase):
                     'Open Project [<span style="background-color: yellow;">' + (",".join(char_filter)) + "</span>]"
                 )
 
-        self.projects_table = ProjectTableView(
-            app,
-            selection_filter_changed=selection_filter_changed,
-            open_project=self.ok_action,
-            close_dialog=self.cancel_action,
+        self.projects_table = ListTableView(
+            table_model=ProjectsModel(app),
+            pass_key_press_event=self.pass_key_press_event,
+            on_double_clicked=lambda _: self.ok_action(),
+            hide_horizontal_header=True,
         )
 
-        self.setLayout(VBoxLayout([label, self.projects_table, self.actions_widgets("Open", "Cancel")]))
+        self.search_field = InTableSearchField(
+            table_view=self.projects_table,
+            on_key_enter=lambda _: self.ok_action(),
+            close_action=lambda: None,
+        )
+
+        self.setLayout(
+            VBoxLayout([self.search_field, W(self.projects_table, stretch=1), self.actions_widgets("Open", "Cancel")])
+        )
+
+    def pass_key_press_event(self) -> Callable[[QKeyEvent], None]:
+        def key_pressed(event: QKeyEvent) -> None:
+            match event.key():
+                case Qt.Key.Key_Return | Qt.Key.Key_Enter:
+                    self.ok_action()
+                case _:
+                    self.search_field.keyPressEvent(event)
+
+        return key_pressed
 
     def ok_action(self):
         indexes: list[QModelIndex] = self.projects_table.selectedIndexes()
         if len(indexes) == 1:
-            project_name_to_open = self.projects_table.projects_model.project_names_raw[indexes[0].row()]
+            project_name_to_open = self.projects_table.table_model.project_names_raw[indexes[0].row()]
             self.project_to_open = project_name_to_open
             self.close()
             self.app.open_project(project_name_to_open)

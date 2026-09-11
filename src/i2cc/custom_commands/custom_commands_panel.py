@@ -120,8 +120,8 @@ class CustomCommandsPanel(VBoxPanel):
             table_model=commands_table_model,
             pass_key_press_event=self.pass_key_press_event,
             on_double_clicked=self.on_commands_table_double_clicked,
+            hide_horizontal_header=True,
         )
-        self.commands_table.horizontalHeader().hide()
         self.commands_table.selectionModel().selectionChanged.connect(
             commands_table_model.update_based_on_command_table_selection_change
         )
@@ -340,6 +340,7 @@ class CustomCommandsPanel(VBoxPanel):
             # keep_selection is False when project just opens, for example when we are switching between projects
             # or on start up when previously opened project is loaded. Thus, we use this flag to see if there is a
             # command called __start__ and if it does, then evaluate it.
+            self.search_field.clear()
             self.results_text.clear()
             for row, c in enumerate(self.commands_table.table_model.commands_to_display):
                 if c.id == "__start__":
