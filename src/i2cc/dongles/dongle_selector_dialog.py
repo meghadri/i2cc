@@ -1,17 +1,16 @@
 import sys
 
 import serial.tools.list_ports as slp
-from pytide6 import ComboBox, Dialog, HBoxPanel, Label, PushButton, VBoxLayout, W
+from pytide6 import ComboBox, HBoxPanel, Label, Prompt, PushButton, VBoxLayout, W
 from sprats.collections import Variable
 
 from i2cc.app import App
 from i2cc.dongles.dongles import SUPPORTED_DONGLES, SUPPORTED_DONGLES_DICT
 
 
-class DongleSelectorDialog(Dialog):
+class DongleSelectorDialog(Prompt[bool]):
     def __init__(self, app: App):
-        super().__init__(app.main_window, windowTitle="Select dongle to connect to", modal=True)
-        self.dongle_selected = False
+        super().__init__(app.main_window, windowTitle="Select dongle to connect to", default_value=False)
 
         ports = [p.device for p in slp.comports() if SUPPORTED_DONGLES[0].comp_port_filter[sys.platform](p)]
         if ports == []:
@@ -43,14 +42,11 @@ class DongleSelectorDialog(Dialog):
                 app.show_error("You cannot select dongle without COM port it is deemed to be connected")
             else:
                 try:
-                    app.i2c_master.value = SUPPORTED_DONGLES_DICT[self.dongle_id.value].cons(
-                        com_port, app.i2c_logger
+                    app.i2c_master.value = SUPPORTED_DONGLES_DICT[self.dongle_id.value].cons(com_port, app.i2c_logger)
+                    app.persistence.config.set_value(
+                        "last_selected_device", {"make_and_model": self.dongle_id.value, "port": com_port}
                     )
-                    app.persistence.config.set_value("last_selected_device", {
-                        "make_and_model": self.dongle_id.value,
-                        "port": com_port
-                    })
-                    self.dongle_selected = True
+                    self.retval = True
                     self.close()
                 except Exception as ex:
                     app.show_error(str(ex))
@@ -73,6 +69,4 @@ class DongleSelectorDialog(Dialog):
 
 
 def select_dongle(app: App) -> bool:
-    dialog = DongleSelectorDialog(app)
-    dialog.exec()
-    return dialog.dongle_selected
+    return DongleSelectorDialog(app).prompt()

@@ -26,6 +26,7 @@ from i2cc.gui_tools import (
 )
 from i2cc.project.projects_gui import (
     DeleteProjectDialog,
+    DownloadProjectDialog,
     NewProjectDialog,
     OpenProjectDialog,
     RenameProjectDialog,
@@ -46,6 +47,8 @@ ACTIONS = [
     Action("Define new register", lambda app: NewRegDefDialog(app).exec()),
     Action("Delete currently active project", lambda app: DeleteProjectDialog(app, app.project.name).exec()),
     Action("Delete custom action/command", None),
+    Action("Download official project", lambda app: DownloadProjectDialog(app).exec()),
+    Action("Download project from URL", None),
     Action("Edit custom action/command", None),
     Action("Execute custom action/command", None),
     Action("Exit/Quit application", lambda app: app.exit_application[0]()),

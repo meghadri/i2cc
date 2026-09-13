@@ -3,11 +3,13 @@ import gzip
 import json
 import marshal
 import re
+import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from types import CodeType
 from typing import Any, Self
 
+import requests
 from rgscore import RegList
 
 PROJECT_RE = re.compile("^[a-zA-Z0-9_]+$")
@@ -279,19 +281,16 @@ class Projects:
             self.projects_file_path.write_text(json.dumps(projects_dirs))
 
     def import_project_from_file(self, file_in: Path | str, app) -> str | None:
-        def name_picker(name: str) -> str | None:
-            from i2cc.project.projects_gui import ImportNameProjectDialog
-
-            dialog = ImportNameProjectDialog(app, name)
-            dialog.exec()
-            return None if dialog.project_name.value.strip() == "" else dialog.project_name.value
+        from i2cc.project.projects_gui import project_name_picker
 
         with gzip.open(Path(file_in)) as f:
             data = json.loads(f.read().decode())
             project_name = data["project_name"]
-            name_to_save_under = name_picker(project_name) if project_name in self.list_projects() else project_name
+            name_to_save_under = (
+                project_name_picker(app, project_name) if project_name in self.list_projects() else project_name
+            )
             if name_to_save_under is not None:
-                project = self.new_project(name_to_save_under)
+                project = self.new_project(name_to_save_under, override_existing=True)
                 project.version_json_path.write_text(json.dumps(data["version"]))
                 project.reg_list_path.write_text(json.dumps(data["regList"]))
                 project.commands_path.write_text(json.dumps(data["commands"]))
@@ -300,22 +299,54 @@ class Projects:
             else:
                 return None
 
+    def download_project_data_from_url(self, url: str) -> str | None:
+        try:
+            response = requests.get(url)
+            if response.status_code == 200:
+                return gzip.decompress(response.content).decode()
+            else:
+                return None
+        except Exception as ex:
+            print(ex)  # TODO: Emit message to show error dialog
+            return None
+
+    def import_project_from_data(self, txt: str, app) -> str | None:
+        from i2cc.project.projects_gui import project_name_picker
+
+        data = json.loads(txt)
+        project_name = data["project_name"]
+        name_to_save_under = (
+            project_name_picker(app, project_name) if project_name in self.list_projects() else project_name
+        )
+        if name_to_save_under is not None:
+            project = self.new_project(name_to_save_under, override_existing=True)
+            project.version_json_path.write_text(json.dumps(data["version"]))
+            project.reg_list_path.write_text(json.dumps(data["regList"]))
+            project.commands_path.write_text(json.dumps(data["commands"]))
+            project.notes_markdown_path.write_text(data["notes"])
+            return project.name
+        else:
+            return None
+
     def list_projects(self) -> list[str]:
         return json.loads(self.projects_file_path.read_text())
 
-    def new_project(self, name: str) -> Project:
+    def new_project(self, name: str, override_existing: bool = False) -> Project:
         if not PROJECT_RE.match(name):
             raise ValueError("Project name must consist of only letters, numbers and underscore characters.")
         dir = self.projects_dir / name
         if dir.exists():
-            raise RuntimeError(f"Project [{name}] already exists.")
-        else:
-            dir.mkdir(exist_ok=False)
-            if not dir.exists():
-                raise RuntimeError(f"Failed to create directory for project [{name}].")
+            if override_existing:
+                shutil.rmtree(dir)
             else:
-                Project(name, dir).save()
-                return self.open_project(name)
+                raise RuntimeError(f"Project [{name}] already exists.")
+
+        dir.mkdir(exist_ok=False)
+        if not dir.exists():
+            raise RuntimeError(f"Failed to create directory for project [{name}].")
+        else:
+            Project(name, dir).save()
+            return self.open_project(name)
 
     def rename_project(self, old_name: str, new_name: str):
         open_projects_history = json.loads(self.projects_file_path.read_text())

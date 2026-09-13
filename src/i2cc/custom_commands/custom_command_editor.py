@@ -15,6 +15,9 @@ from i2cc.app import App
 from i2cc.custom_commands.find_register_dialog import FindRegisterDialog
 from i2cc.project.project import CustomCommand
 
+COMMENT_REGEX = re.compile(r"^(\s*)#\s?")
+NO_COMMENT_REGEX = re.compile(r"^(\s*)")
+
 
 class CodeEditor(QPlainTextEdit):
     space_key_event = QKeyEvent(QtCore.QEvent.Type.KeyPress, Qt.Key.Key_A, QtCore.Qt.KeyboardModifier.NoModifier, " ")
@@ -100,18 +103,50 @@ class CodeEditor(QPlainTextEdit):
                 return
 
             if key == Qt.Key.Key_Slash and event.modifiers() == QtCore.Qt.KeyboardModifier.ControlModifier:
-                # (Un)Comment out line on Ctrl-/
+                # (Un)Comment out line or selection of lines on Ctrl-/
                 c = self.textCursor()
-                c.select(QTextCursor.SelectionType.LineUnderCursor)
-                line_str = c.selection().toPlainText()
-                new_line = re.sub(r"^(\s*)#", r"\1", line_str)
-                if new_line != line_str:
-                    c.removeSelectedText()
-                    c.insertText(new_line)
+                one_line_comment = False
+                if not c.hasSelection():
+                    c.select(QTextCursor.SelectionType.LineUnderCursor)
+                    one_line_comment = True
+
+                selection_start = c.selectionStart()
+                selection_end = c.selectionEnd()
+
+                c.setPosition(selection_start)
+                c.movePosition(QTextCursor.MoveOperation.StartOfLine)
+                start_position = c.position()
+                c.setPosition(selection_end)
+                c.movePosition(QTextCursor.MoveOperation.EndOfLine)
+                end_position = c.position()
+                c.setPosition(start_position)
+                c.setPosition(end_position, QTextCursor.MoveMode.KeepAnchor)
+
+                lines: list[str] = c.selectedText().splitlines()
+                new_lines = []
+                for line in lines:
+                    comment_match = COMMENT_REGEX.match(line)
+                    if comment_match:
+                        new_lines.append(re.sub(COMMENT_REGEX, r"\1", line))
+                    else:
+                        new_lines.append(re.sub(NO_COMMENT_REGEX, r"\1# ", line))
+
+                new_text_block = "\n".join(new_lines)
+                c.beginEditBlock()
+                c.removeSelectedText()
+                c.insertText(new_text_block)
+                c.endEditBlock()
+
+                if one_line_comment:
+                    c.movePosition(QTextCursor.MoveOperation.Down)
                 else:
-                    c.movePosition(QTextCursor.MoveOperation.StartOfLine)
-                    c.insertText("#")
-                c.movePosition(QTextCursor.MoveOperation.Down)
+                    # try to keep selection; it will be distorted a bit most of the time though
+                    c.setPosition(start_position)
+                    c.setPosition(
+                        min(start_position + len(new_text_block), self.document().characterCount() - 1),
+                        QTextCursor.MoveMode.KeepAnchor,
+                    )
+
                 self.setTextCursor(c)
                 return
 

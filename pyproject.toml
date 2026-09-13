@@ -11,11 +11,12 @@ dependencies = [
     "usb-monitor",
     "i2cdriver==1.0.6",
     "pyside6==6.11.1",
-    "pytide6 @ git+https://github.com/priimak/PyTide6.git@v0.20.3",
+    "pytide6 @ git+https://github.com/priimak/PyTide6.git@v0.22.2",
     "sprats @ git+https://github.com/priimak/sprats.git@v0.8.0",
     "i2c-api @ git+https://github.com/priimak/i2c_api.git@v0.15.3",
     "rgscore @ git+https://github.com/priimak/rgscore.git@v0.13.0",
-    "i2capi_i2cdriver @ git+https://github.com/priimak/i2capi_i2cdriver.git@v0.7.2"
+    "i2capi_i2cdriver @ git+https://github.com/priimak/i2capi_i2cdriver.git@v0.7.2",
+    "requests>=2.34.2",
 ]
 
 [project.scripts]

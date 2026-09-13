@@ -233,8 +233,11 @@ class App:
     def init(self):
         self.update_project_selector_current_project(self.project.name)
 
-    def open_project(self, name: str):
-        self.project.save()  # save all data associated with the currently open project
+    def open_project(self, name: str, save_currently_open: bool = True):
+        if save_currently_open:
+            # save all data associated with the currently open project
+            self.project.save()
+
         self.project = self.projects.open_project(name)
         self.request_results_reload()
         self.request_reglist_reload()
@@ -296,7 +299,7 @@ class App:
             try:
                 project_name = self.projects.import_project_from_file(file_name, self)
                 if project_name is not None:
-                    self.open_project(project_name)
+                    self.open_project(project_name, save_currently_open=(project_name != self.project.name))
                 self.persistence.state.set_value("last_used_dir", str(Path(file_name).parent.absolute()))
             except Exception as ex:
                 self.show_error(str(ex))

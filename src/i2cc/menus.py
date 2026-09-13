@@ -9,6 +9,7 @@ from i2cc.dongles.dongle_selector_dialog import select_dongle
 from i2cc.find_actions_dialog import FindActionDialog
 from i2cc.project.projects_gui import (
     DeleteProjectDialog,
+    DownloadProjectDialog,
     NewProjectDialog,
     OpenProjectDialog,
     RenameProjectDialog,
@@ -38,7 +39,9 @@ class FileMenu(QMenu):
         self.addSeparator()
         self.addAction("E&xport Project to File", app.export_project)
         self.addAction("&Import Project from File", app.import_project)
-        self.addAction("I&mport Official Project")
+        self.addSeparator()
+        self.addAction("Do&wnload Official Project", lambda: DownloadProjectDialog(app).exec())
+        self.addAction("Download Project from &URL", None)
         self.addSeparator()
         self.addAction("S&ettings", show_settings_window)
         self.addSeparator()
@@ -71,7 +74,7 @@ class MainMenuBar(QMenuBar):
                         lambda: QMessageBox.about(
                             self,
                             "About",
-                            f"<html><H2>I2C GUI</H2><H4>Version: {__version__}</H4>"
+                            f"<html><H2>I2C Commander</H2><H4>Version: {__version__}</H4>"
                             '<p style="font-size:14px;">"While there is life there is hope. I beg to assert...that '
                             "as long as a man's heart beats, as long as a man's flesh quivers, I do not allow that "
                             'a being gifted with thought and will can allow himself to despair."</br>'
